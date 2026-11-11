@@ -31,15 +31,15 @@ The example config starts in **demo mode**. Demo submissions are validated, but 
 
 Edit `.env` using `.env.example` as a reference:
 
-| Variable | Example / purpose |
-| --- | --- |
-| `PORT` | `3000` |
-| `FEEDBACK_MODE` | `demo` for local testing, `sns` for real delivery |
-| `AWS_REGION` | `eu-west-2` — replace if your SNS topic is in another region |
-| `SNS_TOPIC_ARN` | `arn:aws:sns:eu-west-2:123456789012:footielineup-feedback` — **mock**, replace the account, region, and topic |
-| `AWS_ACCESS_KEY_ID` | `MOCK_ACCESS_KEY_ID_REPLACE_ME` — **mock**, replace securely for local credentials |
-| `AWS_SECRET_ACCESS_KEY` | `MOCK_SECRET_ACCESS_KEY_REPLACE_ME` — **mock**, replace securely for local credentials |
-| `AWS_SESSION_TOKEN` | Blank; supply only when using temporary AWS credentials |
+| Variable            | Example / purpose                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `PORT`              | `3000`                                                                                                        |
+| `FEEDBACK_MODE`     | `demo` for local testing, `sns` for real delivery                                                             |
+| `REGION`            | `eu-west-2` — replace if your SNS topic is in another region                                                  |
+| `SNS_TOPIC_ARN`     | `arn:aws:sns:eu-west-2:123456789012:footielineup-feedback` — **mock**, replace the account, region, and topic |
+| `ACCESS_KEY_ID`     | `MOCK_ACCESS_KEY_ID_REPLACE_ME` — **mock**, replace securely for local credentials                            |
+| `SECRET_ACCESS_KEY` | `MOCK_SECRET_ACCESS_KEY_REPLACE_ME` — **mock**, replace securely for local credentials                        |
+| `SESSION_TOKEN`     | Blank; supply only when using temporary AWS credentials                                                       |
 
 For deployed environments, use an IAM role and the AWS SDK default credential provider chain instead of static keys. **Remove the mock AWS credential variables when using a role or profile** so they do not override it. Never commit real credentials; use your host's secure environment settings or secret manager.
 
@@ -52,11 +52,13 @@ For deployed environments, use an IAM role and the AWS SDK default credential pr
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": "sns:Publish",
-    "Resource": "arn:aws:sns:eu-west-2:123456789012:footielineup-feedback"
-  }]
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "sns:Publish",
+      "Resource": "arn:aws:sns:eu-west-2:123456789012:footielineup-feedback"
+    }
+  ]
 }
 ```
 
