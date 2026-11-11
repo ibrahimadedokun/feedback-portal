@@ -14,7 +14,7 @@ npm run dev
 
 Open `http://localhost:3000`. Use `npm start` to run without the development watcher. Environment changes require a server restart.
 
-The example config starts in **demo mode**. Demo submissions are validated, but **not stored or sent to AWS**. Both the form and confirmation explicitly say this. Mock AWS values and the mock project URL are included so you can replace them later; they are not working credentials or a real endpoint. `.env` is ignored by Git.
+The example config starts in **demo mode**. Demo submissions are validated, but **not stored or sent to AWS**. Both the form and confirmation explicitly say this. Mock AWS values and a mock project URL in `projects.json` are included so you can replace them later; they are not working credentials or a real endpoint. `.env` is ignored by Git.
 
 ## Features
 
@@ -35,7 +35,6 @@ Edit `.env` using `.env.example` as a reference:
 | --- | --- |
 | `PORT` | `3000` |
 | `FEEDBACK_MODE` | `demo` for local testing, `sns` for real delivery |
-| `FOOTIELINEUP_URL` | `https://footielineup.example.com` — **mock**, replace with the real app URL; omit to hide the link |
 | `AWS_REGION` | `eu-west-2` — replace if your SNS topic is in another region |
 | `SNS_TOPIC_ARN` | `arn:aws:sns:eu-west-2:123456789012:footielineup-feedback` — **mock**, replace the account, region, and topic |
 | `AWS_ACCESS_KEY_ID` | `MOCK_ACCESS_KEY_ID_REPLACE_ME` — **mock**, replace securely for local credentials |
@@ -68,7 +67,7 @@ The SNS message is JSON containing `id`, `project`, `rating`, `likes`, `improvem
 
 ## Project list
 
-The server's `projects` array in `server.js` defines the selector options. FootieLineup is included. Add an `id`, `name`, `description`, and valid HTTP(S) `url` for each additional project. IDs are validated on submission.
+The server reads the selector options and URLs directly from `projects.json`. Add an `id`, `name`, `description`, and HTTP(S) `url` for each project; use `null` to hide the project link. IDs are validated on submission.
 
 ## Tests
 
@@ -101,6 +100,7 @@ Run this as a Node service behind an HTTPS reverse proxy, binding to the port su
 
 ```text
 public/                 Responsive UI, styles, and browser interactions
+projects.json          Project selector data used by the server
 server.js               Static server, validation, and SNS publisher
 .env.example            Editable mock configuration
 playwright.config.js    Desktop/mobile browser-test configuration
