@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#204b3a"><meta name="description" content="A little feedback goes a long way. Help shape the next chapter of FootieLineup.">
+  <title>Share your thoughts · Feedback Studio</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23204b3a'/%3E%3Cpath d='M10 11h20v14H19l-7 5v-5h-2z' fill='%23d5edb2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css"><script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="site-header"><a class="brand" href="/" aria-label="Feedback Studio home"><span class="brand-mark" aria-hidden="true">f<span>•</span></span> feedback<span class="brand-light">studio</span></a><span class="header-note"><span class="status-dot"></span> A little feedback. A big difference.</span><a class="header-link" href="#feedback-form">Share your thoughts <span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></span></a></header>
+  <main class="layout">
+    <aside class="intro">
+      <div class="eyebrow"><span></span> BUILT TOGETHER, MADE BETTER</div>
+      <h1>Good products<br>start with <br><em>your perspective.</em></h1>
+      <p class="intro-copy">The little things you love. The things you’d change. We’re here for all of it.</p>
+      <div class="illustration" aria-hidden="true">
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <span class="spark spark-one">✳</span><span class="spark spark-two">✦</span>
+        <div class="floating-note note-back"><span>YOUR IDEAS</span><div>✦ <i></i></div><i></i></div>
+        <div class="floating-note note-front"><div class="note-dots">● ● ●</div><div class="note-stars">★ ★ ★ ★ ★</div><div class="note-line"></div><div class="note-line short"></div><span class="note-heart">♡</span></div>
+        <span class="sketch-arrow"><svg viewBox="0 0 70 70"><path d="M8 58Q56 62 47 13M32 29l15-16 14 18"/></svg></span><span class="illustration-caption">a fresh perspective changes everything</span>
+      </div>
+      <div class="aside-bottom"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></span><div><strong>Your voice moves us forward.</strong><p>Thoughtfully read. Always appreciated.</p></div></div>
+    </aside>
+    <section class="feedback-card" aria-labelledby="form-heading">
+      <div class="card-top"><span class="pill"><span></span> THE FEEDBACK CORNER</span><span class="time-label"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg> About 2 minutes</span></div>
+      <h2 id="form-heading">Let’s make it better.</h2><p class="card-subtitle">A few honest thoughts can make a world of difference.</p>
+      <div id="loading-message" class="loading-message" role="status">Getting your feedback space ready…</div>
+      <form id="feedback-form" hidden>
+        <div class="project-field"><label for="project">Which project is on your mind?</label><div class="select-wrap"><span class="project-icon" aria-hidden="true">⚽</span><select id="project" name="project" required></select><span class="select-chevron" aria-hidden="true">⌄</span></div><div class="project-detail"><span id="project-description"></span><a id="project-link" target="_blank" rel="noopener noreferrer" hidden>Visit project <span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></span></a><span id="url-unavailable">Project link coming soon</span></div></div>
+        <div class="divider"></div>
+        <fieldset class="rating-field"><legend>How’s your experience so far? <span class="required">*</span></legend><p>Give it a little star power.</p><div class="rating-line"><div class="stars" id="stars">
+          <label class="star-option"><input type="radio" name="rating" value="1" required aria-label="1 star — Needs work"><span aria-hidden="true">★</span></label>
+          <label class="star-option"><input type="radio" name="rating" value="2" aria-label="2 stars — Could be better"><span aria-hidden="true">★</span></label>
+          <label class="star-option"><input type="radio" name="rating" value="3" aria-label="3 stars — Pretty good"><span aria-hidden="true">★</span></label>
+          <label class="star-option"><input type="radio" name="rating" value="4" aria-label="4 stars — Really good"><span aria-hidden="true">★</span></label>
+          <label class="star-option"><input type="radio" name="rating" value="5" aria-label="5 stars — Love it!"><span aria-hidden="true">★</span></label>
+        </div><span id="rating-caption" aria-live="polite">Your honest take</span></div></fieldset>
+        <div class="text-field"><label for="likes">What do you love about it? <span class="required">*</span><span class="label-icon" aria-hidden="true">♡</span></label><textarea id="likes" name="likes" rows="3" maxlength="2000" placeholder="The features, the feel, that one little detail…" required></textarea><span class="counter" id="likes-count">0 / 2,000</span></div>
+        <div class="text-field"><label for="improvements">What could be even better? <span class="required">*</span><span class="label-icon" aria-hidden="true">✧</span></label><textarea id="improvements" name="improvements" rows="3" maxlength="2000" placeholder="An idea, a rough edge, or something you wish existed…" required></textarea><span class="counter" id="improvements-count">0 / 2,000</span></div>
+        <p id="form-error" class="form-error" role="alert" hidden></p>
+        <button class="submit-button" id="submit-button" type="submit"><span>Send feedback</span><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></span></button>
+        <p class="privacy-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 5-7 9-7 9s-7-4-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>No sign-up. Just your perspective.</p>
+        <p id="demo-note" class="demo-note" hidden>Demo mode · Try the form. Feedback won’t be stored or delivered.</p>
+      </form>
+      <div id="success-panel" class="success-panel" hidden tabindex="-1"><span class="success-icon" aria-hidden="true">✓</span><span class="eyebrow">A LITTLE FEEDBACK, A BIG DIFFERENCE</span><h3>That’s how better begins.</h3><p id="success-message"></p><button id="send-another" class="submit-button" type="button">Share more thoughts <span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></span></button></div>
+    </section>
+  </main>
+  <footer><span>© <span id="year"></span> Feedback Studio</span><span>Made for better conversations <span class="footer-spark" aria-hidden="true">✳</span></span><span>Small thoughts. Meaningful change.</span></footer>
+</body>
+</html>
