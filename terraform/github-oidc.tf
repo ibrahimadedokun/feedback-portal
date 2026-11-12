@@ -47,10 +47,13 @@ resource "aws_iam_role_policy" "github_deploy" {
         Resource = "${aws_s3_bucket.artifacts.arn}/releases/*"
       },
       {
-        Sid      = "CreateApplicationVersion"
-        Effect   = "Allow"
-        Action   = ["elasticbeanstalk:CreateApplicationVersion"]
-        Resource = "arn:${data.aws_partition.current.partition}:elasticbeanstalk:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application/${aws_elastic_beanstalk_application.app.name}"
+        Sid    = "CreateApplicationVersion"
+        Effect = "Allow"
+        Action = ["elasticbeanstalk:CreateApplicationVersion"]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:elasticbeanstalk:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application/${aws_elastic_beanstalk_application.app.name}",
+          "arn:${data.aws_partition.current.partition}:elasticbeanstalk:${var.aws_region}:${data.aws_caller_identity.current.account_id}:applicationversion/${aws_elastic_beanstalk_application.app.name}/github-*",
+        ]
       },
       {
         Sid      = "UpdateEnvironment"
