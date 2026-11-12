@@ -47,6 +47,12 @@ resource "aws_iam_role_policy" "github_deploy" {
         Resource = "${aws_s3_bucket.artifacts.arn}/releases/*"
       },
       {
+        Sid      = "ReadReleaseBundle"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.artifacts.arn}/releases/*"
+      },
+      {
         Sid    = "CreateApplicationVersion"
         Effect = "Allow"
         Action = ["elasticbeanstalk:CreateApplicationVersion"]
