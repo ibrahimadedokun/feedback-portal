@@ -106,6 +106,16 @@ The Terraform-created IAM role trusts only the configured repository and
 branch. It uses GitHub's OIDC token exchange; no long-lived AWS access key is
 needed in GitHub.
 
+The deployment policy includes access to upload and read `releases/*`, create
+`github-*` application versions, update this environment's CloudFormation stack
+and Auto Scaling group, inspect infrastructure, and pass only this project's
+service and instance roles to AWS services. Beanstalk also requires access to
+its regional `elasticbeanstalk-REGION-ACCOUNT_ID` S3 bucket to stage environment
+data, even though release bundles use a separate bucket. The policy covers
+that bucket's creation, access controls, and objects. These permissions support
+application deployments to the existing environment; infrastructure changes
+continue to be managed through Terraform.
+
 For repositories using [immutable OIDC subjects](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims),
 set `github_repository_ids` in `terraform.tfvars` before applying. GitHub uses
 this format by default for repositories created after July 15, 2026. Retrieve
