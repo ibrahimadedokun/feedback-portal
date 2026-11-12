@@ -34,7 +34,9 @@ const safeUrl = (value) => {
 export function createApp({
   mode = process.env.FEEDBACK_MODE || "sns",
   topic = process.env.SNS_TOPIC_ARN,
-  region = process.env.REGION || process.env.AWS_DEFAULT_REGION,
+  region = process.env.AWS_REGION ||
+    process.env.REGION ||
+    process.env.AWS_DEFAULT_REGION,
   publish,
   rateLimit = 20,
 } = {}) {

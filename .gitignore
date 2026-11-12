@@ -5,3 +5,9 @@ node_modules/
 playwright-report/
 test-results/
 .DS_Store
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/crash.log
+terraform/terraform.tfvars
+terraform/*.zip

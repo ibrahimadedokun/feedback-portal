@@ -1,0 +1,4 @@
+aws_region        = "eu-west-2"
+github_repository = "YOUR_GITHUB_OWNER/feedback-portal"
+github_branch     = "main"
+sns_topic_arn = "arn:aws:sns:eu-west-2:123456789012:feedback-topic"

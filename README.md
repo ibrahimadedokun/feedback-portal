@@ -4,7 +4,7 @@ A responsive feedback portal for **FootieLineup**, built from the supplied wiref
 
 ## Run locally
 
-Requires **Node.js 22 or newer** and npm. No build step, database, or frontend framework is needed.
+Requires **Node.js 26 or newer** and npm. `.nvmrc` selects Node.js 26 for local version managers and GitHub Actions; Elastic Beanstalk uses the same major version. No build step, database, or frontend framework is needed.
 
 ```sh
 npm ci
@@ -14,7 +14,7 @@ npm run dev
 
 Open `http://localhost:3000`. Use `npm start` to run without the development watcher. Environment changes require a server restart.
 
-The example config starts in **demo mode**. Demo submissions are validated, but **not stored or sent to AWS**. Both the form and confirmation explicitly say this. Mock AWS values and a mock project URL in `projects.json` are included so you can replace them later; they are not working credentials or a real endpoint. `.env` is ignored by Git.
+The example config starts in **demo mode**. Demo submissions are validated, but **not stored or sent to AWS**. Both the form and confirmation explicitly say this. The example SNS topic ARN is a placeholder; replace it before enabling delivery. Project links are configured in `projects.json`. `.env` is ignored by Git.
 
 ## Features
 
@@ -35,13 +35,13 @@ Edit `.env` using `.env.example` as a reference:
 | ------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `PORT`              | `3000`                                                                                                        |
 | `FEEDBACK_MODE`     | `demo` for local testing, `sns` for real delivery                                                             |
-| `REGION`            | `eu-west-2` — replace if your SNS topic is in another region                                                  |
+| `AWS_REGION`        | `eu-west-2` — replace if your SNS topic is in another region                                                  |
 | `SNS_TOPIC_ARN`     | `arn:aws:sns:eu-west-2:123456789012:footielineup-feedback` — **mock**, replace the account, region, and topic |
-| `ACCESS_KEY_ID`     | `MOCK_ACCESS_KEY_ID_REPLACE_ME` — **mock**, replace securely for local credentials                            |
-| `SECRET_ACCESS_KEY` | `MOCK_SECRET_ACCESS_KEY_REPLACE_ME` — **mock**, replace securely for local credentials                        |
-| `SESSION_TOKEN`     | Blank; supply only when using temporary AWS credentials                                                       |
+| `AWS_ACCESS_KEY_ID` | Optional local access key; leave unset when using a profile or IAM role                                        |
+| `AWS_SECRET_ACCESS_KEY` | Optional local secret key; leave unset when using a profile or IAM role                                    |
+| `AWS_SESSION_TOKEN` | Supply only when using temporary AWS credentials                                                              |
 
-For deployed environments, use an IAM role and the AWS SDK default credential provider chain instead of static keys. **Remove the mock AWS credential variables when using a role or profile** so they do not override it. Never commit real credentials; use your host's secure environment settings or secret manager.
+For deployed environments, use an IAM role and the AWS SDK default credential provider chain instead of static keys. The example leaves credential variables commented out so a role or profile can supply them. Never commit real credentials; use your host's secure environment settings or secret manager. `REGION` and `AWS_DEFAULT_REGION` remain supported as region fallbacks; `AWS_REGION` takes precedence. The old unprefixed credential names (`ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, and `SESSION_TOKEN`) were not read by the SDK; use the `AWS_` names above.
 
 ### Enable real SNS delivery
 
@@ -71,6 +71,12 @@ The SNS message is JSON containing `id`, `project`, `rating`, `likes`, `improvem
 
 The server reads the selector options and URLs directly from `projects.json`. Add an `id`, `name`, `description`, and HTTP(S) `url` for each project; use `null` to hide the project link. IDs are validated on submission.
 
+## Deploy to AWS
+
+See the [AWS deployment guide](./terraform/README.md) for the low-cost
+Elastic Beanstalk setup, Terraform steps, GitHub Actions configuration, and
+cost limitations.
+
 ## Tests
 
 ```sh
@@ -87,7 +93,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:browser
 
 The backend suite covers demo mode, SNS publishing with a mock publisher, payload validation, missing configuration, delivery failures, request limits, and cross-origin protection. Browser tests cover desktop and mobile submission, validation, rating, reset, error recovery, and overflow checks. Screenshots are written to the ignored `test-results/` directory.
 
-Verified during development: **5 backend tests and 4 browser tests passed**, using system Chromium. Live AWS delivery remains unverified until real settings are supplied.
+The deployment workflow runs backend and desktop/mobile browser tests before requesting AWS credentials. Live AWS delivery remains unverified until real settings are supplied.
 
 ## API
 

@@ -1,14 +1,17 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+const projects = JSON.parse(
+  readFileSync(new URL("../projects.json", import.meta.url), "utf8"),
+);
 test("responsive feedback flow with validation, rating, and reset", async ({
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("combobox")).toHaveValue("footielineup");
-  await expect(page.getByRole("option")).toHaveCount(2);
-  await expect(page.getByRole("option")).toHaveText([
-    "FootieLineup",
-    "Islamic Wordle",
-  ]);
+  await expect(page.getByRole("combobox")).toHaveValue(projects[0].id);
+  await expect(page.getByRole("option")).toHaveCount(projects.length);
+  await expect(page.getByRole("option")).toHaveText(
+    projects.map((project) => project.name),
+  );
   await expect(page.getByText("Demo mode ·")).toBeVisible();
   await page.getByRole("button", { name: "Send feedback" }).click();
   await expect(page.locator("#success-panel")).toBeHidden();

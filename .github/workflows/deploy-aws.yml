@@ -1,0 +1,95 @@
+name: Deploy to AWS Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-elastic-beanstalk-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies and test
+        run: |
+          npm ci
+          npm test
+          npx playwright install --with-deps chromium
+          npm run test:browser
+
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Package application
+        shell: bash
+        run: |
+          zip -r "$RUNNER_TEMP/deployment.zip" . \
+            -x ".git/*" \
+               ".github/*" \
+               ".env" \
+               ".env.*" \
+               "e2e/*" \
+               "node_modules/*" \
+               "terraform/*" \
+               "test/*" \
+               "test-results/*" \
+               "playwright-report/*" \
+               "README.md" \
+               "playwright.config.js"
+
+      - name: Upload bundle and create application version
+        id: version
+        shell: bash
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          APPLICATION_NAME: ${{ vars.EB_APPLICATION_NAME }}
+          ARTIFACT_BUCKET: ${{ vars.DEPLOYMENT_BUCKET }}
+        run: |
+          set -euo pipefail
+          : "${APPLICATION_NAME:?Set the EB_APPLICATION_NAME GitHub Actions variable}"
+          : "${ARTIFACT_BUCKET:?Set the DEPLOYMENT_BUCKET GitHub Actions variable}"
+          version_label="github-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
+          s3_key="releases/${version_label}.zip"
+
+          aws s3 cp "$RUNNER_TEMP/deployment.zip" "s3://${ARTIFACT_BUCKET}/${s3_key}"
+          aws elasticbeanstalk create-application-version \
+            --application-name "$APPLICATION_NAME" \
+            --version-label "$version_label" \
+            --source-bundle "S3Bucket=${ARTIFACT_BUCKET},S3Key=${s3_key}"
+          echo "version_label=${version_label}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy and wait for environment
+        shell: bash
+        env:
+          APPLICATION_NAME: ${{ vars.EB_APPLICATION_NAME }}
+          ENVIRONMENT_NAME: ${{ vars.EB_ENVIRONMENT_NAME }}
+          VERSION_LABEL: ${{ steps.version.outputs.version_label }}
+        run: |
+          set -euo pipefail
+          : "${ENVIRONMENT_NAME:?Set the EB_ENVIRONMENT_NAME GitHub Actions variable}"
+          aws elasticbeanstalk update-environment \
+            --application-name "$APPLICATION_NAME" \
+            --environment-name "$ENVIRONMENT_NAME" \
+            --version-label "$VERSION_LABEL"
+          aws elasticbeanstalk wait environment-updated \
+            --environment-name "$ENVIRONMENT_NAME"
