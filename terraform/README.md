@@ -1,10 +1,17 @@
 # AWS deployment
 
 This Terraform configuration deploys the existing Node.js application to a
-single-instance AWS Elastic Beanstalk environment. It creates a private S3
-deployment-bundle bucket, narrowly scoped IAM roles, and
-a GitHub Actions OIDC role. The first application bundle is deployed by
+single-instance AWS Elastic Beanstalk environment with a CloudFront HTTPS
+endpoint. It creates a private S3 deployment-bundle bucket, narrowly scoped IAM
+roles, and a GitHub Actions OIDC role. The first application bundle is deployed by
 Terraform; later pushes to `main` are deployed by GitHub Actions.
+
+CloudFront provides an AWS-managed `https://...cloudfront.net` address and
+certificate. No custom domain, ACM certificate, or Application Load Balancer is
+needed. HTTP requests to that address redirect to HTTPS. Caching is disabled,
+all application methods (including feedback POSTs) are forwarded, and viewer
+headers, cookies, and query strings reach the app. Forwarding both `Host` and
+`Origin` preserves the server's same-origin validation.
 
 Feedback is published to your existing standard SNS topic. Terraform does not
 create or manage the topic or its email subscriptions. Set `sns_topic_arn` to
@@ -18,30 +25,35 @@ When upgrading an existing checkout, run `terraform init -upgrade` and review
 ## Cost and availability
 
 Elastic Beanstalk has no separate service fee, but the AWS resources it creates
-are billed. This configuration deliberately uses one `t3.micro` EC2 instance,
-small root storage, and no load balancer, NAT Gateway, database, or custom
-domain. A single instance is not highly available and can be interrupted during
+are billed. This configuration uses CloudFront, one `t3.micro` EC2 instance,
+and no load balancer, NAT Gateway, database, or custom domain. A single instance
+is not highly available and can be interrupted during
 maintenance or fail without an automatic replacement across multiple
 availability zones.
 
 There is no universally free always-on option for this existing server
 configuration. The instance, its public IPv4 address, storage, data transfer,
-and SNS usage can incur charges. Whether Free Tier benefits or account credits
-cover them depends on your account, plan, region, and current AWS offers. Check
+SNS usage, and CloudFront requests and data transfer can incur charges. Whether
+Free Tier benefits or account credits cover them depends on your account, plan,
+region, and current AWS offers. Check
 the [AWS Free Tier terms](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier.html)
 and [Elastic Beanstalk pricing](https://aws.amazon.com/elasticbeanstalk/pricing/)
 before applying. Configure an AWS Budget or billing alert first. The lowest-cost
 way to stop ongoing environment charges when you are done testing is
 `terraform destroy`.
 
-The default Elastic Beanstalk URL is HTTP. Do not send sensitive information
-over it. Adding HTTPS with an Application Load Balancer or a separate HTTPS
-front end increases cost and is left out of this low-cost setup.
+The public `application_url` uses HTTPS between the browser and CloudFront.
+CloudFront connects to Beanstalk over HTTP, and the Beanstalk origin remains
+publicly reachable over HTTP. This is not end-to-end TLS. For sensitive feedback,
+configure a domain and certificate on the origin and change CloudFront's origin
+protocol policy to `https-only` before collecting it. An ALB alone cannot provide
+browser-trusted HTTPS on its AWS-generated hostname without a matching domain
+and certificate.
 
 ## Prerequisites
 
 1. An AWS account with permissions to create Elastic Beanstalk environments,
-   EC2/IAM/S3 resources, and an IAM OIDC provider.
+   EC2/IAM/S3 resources, a CloudFront distribution, and an IAM OIDC provider.
 2. Terraform 1.5 or later, AWS CLI v2, and Git installed locally.
 3. AWS credentials configured locally through AWS IAM Identity Center/SSO or
    another supported AWS credential provider. Do not put access keys in
@@ -52,7 +64,7 @@ front end increases cost and is left out of this low-cost setup.
 
 Elastic Beanstalk uses the account's default VPC if one exists. If it does not,
 provide a VPC and subnet IDs in `terraform.tfvars`. The instance needs a public
-route so the application can be reached directly without a load balancer.
+route so CloudFront can reach it without a load balancer.
 
 ## Deploy the infrastructure
 
@@ -99,6 +111,12 @@ terraform output -raw application_url
 The environment is initially deployed from the repository bundle by Terraform.
 You can open the URL and check `GET /api/config` before configuring automatic
 deployments.
+
+For an existing deployment, run the same plan/apply commands without replacing
+your `terraform.tfvars`. The plan should add CloudFront and update outputs while
+keeping the existing Beanstalk environment. CloudFront deployment can take
+several minutes. Use the new `application_url` after apply completes; the old
+Beanstalk URL is available separately as `beanstalk_origin_url`.
 
 ## Enable GitHub Actions deployments
 
@@ -170,7 +188,8 @@ If using a non-standard AWS partition, use that partition in the ARN.
 ## Verify the app
 
 1. Open the `application_url` output in a browser. The feedback page should
-   load from the Node.js server.
+   load over HTTPS through CloudFront from the Node.js server. Opening the same
+   CloudFront address with `http://` should redirect to `https://`.
 2. Request `/api/config` on the same host. It should return the projects from
    `projects.json` and `"mode":"sns"`.
 3. Check that your existing topic's email subscription is confirmed.

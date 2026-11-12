@@ -73,9 +73,10 @@ The server reads the selector options and URLs directly from `projects.json`. Ad
 
 ## Deploy to AWS
 
-See the [AWS deployment guide](./terraform/README.md) for the low-cost
-Elastic Beanstalk setup, Terraform steps, GitHub Actions configuration, and
-cost limitations.
+See the [AWS deployment guide](./terraform/README.md) for the Elastic Beanstalk
+setup with a CloudFront HTTPS endpoint, Terraform steps, GitHub Actions
+configuration, and cost limitations. CloudFront supplies a `cloudfront.net`
+hostname and certificate, so no custom domain or ACM certificate is required.
 
 ## Tests
 

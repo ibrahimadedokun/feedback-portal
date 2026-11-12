@@ -9,7 +9,17 @@ output "environment_name" {
 }
 
 output "application_url" {
-  description = "HTTP URL for the application. This single-instance setup does not configure HTTPS."
+  description = "Public HTTPS URL using CloudFront's included hostname and certificate."
+  value       = "https://${aws_cloudfront_distribution.app.domain_name}"
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution serving the public HTTPS endpoint."
+  value       = aws_cloudfront_distribution.app.id
+}
+
+output "beanstalk_origin_url" {
+  description = "HTTP origin for CloudFront; use application_url for browser access."
   value       = "http://${aws_elastic_beanstalk_environment.app.cname}"
 }
 
