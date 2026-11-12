@@ -106,6 +106,24 @@ The Terraform-created IAM role trusts only the configured repository and
 branch. It uses GitHub's OIDC token exchange; no long-lived AWS access key is
 needed in GitHub.
 
+For repositories using [immutable OIDC subjects](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims),
+set `github_repository_ids` in `terraform.tfvars` before applying. GitHub uses
+this format by default for repositories created after July 15, 2026. Retrieve
+`owner.id` and `id` from `https://api.github.com/repos/OWNER/REPOSITORY`:
+
+```hcl
+github_repository_ids = {
+  owner_id      = "123456"
+  repository_id = "456789"
+}
+```
+
+Leave this variable unset only when the repository uses the legacy subject
+without IDs. An incorrect subject causes `Not authorized to perform
+sts:AssumeRoleWithWebIdentity`. Apply the Terraform change before retrying the
+workflow, and ensure `AWS_ROLE_ARN` matches the deployment role output. Manual
+workflow runs must select the configured `github_branch`.
+
 1. From the `terraform` directory, copy the output values:
 
    ```powershell

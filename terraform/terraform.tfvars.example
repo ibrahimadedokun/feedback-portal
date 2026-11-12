@@ -1,4 +1,11 @@
 aws_region        = "eu-west-2"
 github_repository = "YOUR_GITHUB_OWNER/feedback-portal"
 github_branch     = "main"
+# Set both IDs for repositories using immutable OIDC subjects (default for new
+# repositories after July 15, 2026). Get them from GitHub's repository API:
+# https://api.github.com/repos/OWNER/REPOSITORY (owner.id and id).
+# github_repository_ids = {
+#   owner_id      = "123456"
+#   repository_id = "456789"
+# }
 sns_topic_arn = "arn:aws:sns:eu-west-2:123456789012:feedback-topic"

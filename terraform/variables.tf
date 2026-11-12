@@ -37,6 +37,23 @@ variable "github_repository" {
   }
 }
 
+variable "github_repository_ids" {
+  description = "GitHub owner and repository IDs for immutable OIDC subjects. Leave null only for repositories using the legacy subject format."
+  type = object({
+    owner_id      = string
+    repository_id = string
+  })
+  default = null
+
+  validation {
+    condition = var.github_repository_ids == null ? true : (
+      can(regex("^[0-9]+$", var.github_repository_ids.owner_id)) &&
+      can(regex("^[0-9]+$", var.github_repository_ids.repository_id))
+    )
+    error_message = "GitHub owner_id and repository_id must both be numeric IDs."
+  }
+}
+
 variable "github_branch" {
   description = "Only this branch may assume the GitHub Actions deployment role."
   type        = string

@@ -1,3 +1,12 @@
+locals {
+  github_repository_parts = split("/", var.github_repository)
+  github_oidc_repository = var.github_repository_ids == null ? var.github_repository : format(
+    "%s@%s/%s@%s",
+    local.github_repository_parts[0], var.github_repository_ids.owner_id,
+    local.github_repository_parts[1], var.github_repository_ids.repository_id,
+  )
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
@@ -17,7 +26,7 @@ resource "aws_iam_role" "github_deploy" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:ref:refs/heads/${var.github_branch}"
+          "token.actions.githubusercontent.com:sub" = "repo:${local.github_oidc_repository}:ref:refs/heads/${var.github_branch}"
         }
       }
     }]
