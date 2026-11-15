@@ -62,6 +62,20 @@ does not create an Azure email service or migrate existing AWS resources.
    repositories. Azure pulls this image anonymously. See
    [GitHub's container registry guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
+The workflow pushes only the tested `linux/amd64` image. Docker's
+[`push --platform` option](https://docs.docker.com/reference/cli/docker/image/push/)
+publishes that platform's manifest without an image index or build attestations.
+This avoids the index/attestation publication path when GHCR accepts image
+layers but rejects the final push. Build attestations are not published by this
+workflow.
+
+If GHCR reports a package permission error, open the existing package's
+**Package settings → Manage Actions access** and grant this repository **Write**
+access. The workflow already requests `packages: write`; an existing package
+can still require an explicit repository grant. Making a package public grants
+anonymous pull access, not publishing permission. See
+[GitHub's package access settings](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
+
 ## Provision Azure
 
 In PowerShell, from the repository root:

@@ -84,9 +84,20 @@ jobs:
           IMAGE: ${{ steps.image.outputs.image }}
         run: |
           set -euo pipefail
+          umask 077
+          export DOCKER_CONFIG
+          DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/ghcr-docker.XXXXXX")
+          cleanup_registry_login() {
+            status=$?
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            rm -rf -- "$DOCKER_CONFIG"
+            exit "$status"
+          }
+          trap cleanup_registry_login EXIT
           printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          trap 'docker logout ghcr.io >/dev/null' EXIT
-          docker push "$IMAGE"
+          # Publish the tested Linux image directly. This excludes the local
+          # image index and attestations, which can fail during GHCR publication.
+          docker push --platform linux/amd64 "$IMAGE"
           echo "Published image: \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
           echo 'For the first deployment, make the GHCR package public and use this image in terraform/azure/terraform.tfvars.' >> "$GITHUB_STEP_SUMMARY"
 
