@@ -78,6 +78,16 @@ setup with a CloudFront HTTPS endpoint, Terraform steps, GitHub Actions
 configuration, and cost limitations. CloudFront supplies a `cloudfront.net`
 hostname and certificate, so no custom domain or ACM certificate is required.
 
+## Deploy to Azure
+
+See the [Azure deployment guide](./terraform/azure/README.md) for a separate
+Terraform environment and GitHub Actions workflow. It uses Container Apps
+Consumption with scale to zero, a public GHCR image, and a managed HTTPS address.
+No Azure container registry, database, dedicated compute, or Log Analytics
+workspace is provisioned. Demo mode is the default; real delivery uses the
+existing AWS SNS integration. Monthly free allowances are usage limits, not a
+guarantee of a zero bill.
+
 ## Tests
 
 ```sh

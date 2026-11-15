@@ -11,3 +11,9 @@ terraform/*.tfstate.*
 terraform/crash.log
 terraform/terraform.tfvars
 terraform/*.zip
+terraform/azure/.terraform/
+terraform/azure/*.tfstate
+terraform/azure/*.tfstate.*
+terraform/azure/*.tfplan
+terraform/azure/crash.log
+terraform/azure/terraform.tfvars

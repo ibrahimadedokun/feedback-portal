@@ -1,0 +1,133 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy after publishing (leave off for the first image build)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: azure-container-apps-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || vars.AZURE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+      - name: Validate Azure infrastructure
+        run: |
+          terraform -chdir=terraform/azure init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=terraform/azure fmt -check
+          terraform -chdir=terraform/azure validate
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies and test
+        run: |
+          npm ci
+          npm test
+          npx playwright install --with-deps chromium
+          npm run test:browser
+
+      - name: Build and smoke test the production image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
+          docker build --platform linux/amd64 --tag "$image" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" .
+          docker run --detach --name feedback-smoke \
+            --publish 127.0.0.1:3200:3000 --env FEEDBACK_MODE=demo "$image"
+          trap 'docker rm --force feedback-smoke >/dev/null' EXIT
+          curl --fail --retry 15 --retry-connrefused --retry-delay 2 \
+            http://127.0.0.1:3200/api/config -o "$RUNNER_TEMP/config.json"
+          node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1])); if(c.mode!=="demo" || !c.projects.length) process.exit(1)' "$RUNNER_TEMP/config.json"
+          curl --fail http://127.0.0.1:3200/ --output /dev/null
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to GitHub Container Registry
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io >/dev/null' EXIT
+          docker push "$IMAGE"
+          echo "Published image: \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo 'For the first deployment, make the GHCR package public and use this image in terraform/azure/terraform.tfvars.' >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.deploy)
+    runs-on: ubuntu-latest
+    environment: azure-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Validate deployment settings and anonymous image access
+        shell: bash
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_CONTAINER_APP: ${{ vars.AZURE_CONTAINER_APP }}
+        run: |
+          set -euo pipefail
+          : "${AZURE_CLIENT_ID:?Set AZURE_CLIENT_ID}"
+          : "${AZURE_TENANT_ID:?Set AZURE_TENANT_ID}"
+          : "${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID}"
+          : "${AZURE_RESOURCE_GROUP:?Set AZURE_RESOURCE_GROUP}"
+          : "${AZURE_CONTAINER_APP:?Set AZURE_CONTAINER_APP}"
+          docker manifest inspect "$IMAGE" >/dev/null || {
+            echo 'Make the GHCR package public before deploying; Azure pulls without registry credentials.' >&2
+            exit 1
+          }
+
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy and verify HTTPS
+        shell: bash
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          CONTAINER_APP: ${{ vars.AZURE_CONTAINER_APP }}
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors
+          az containerapp update --resource-group "$RESOURCE_GROUP" \
+            --name "$CONTAINER_APP" --image "$IMAGE" --output none
+          host=$(az containerapp show --resource-group "$RESOURCE_GROUP" \
+            --name "$CONTAINER_APP" --query properties.configuration.ingress.fqdn --output tsv)
+          test -n "$host"
+          curl --fail --retry 12 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 10 --max-time 30 "https://$host/api/config"
+          echo "Application: https://$host" >> "$GITHUB_STEP_SUMMARY"
