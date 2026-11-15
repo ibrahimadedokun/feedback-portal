@@ -128,6 +128,19 @@ terraform output -raw application_url
 terraform output -json github_actions_variables
 ```
 
+The committed provider lock file includes checksums for Windows AMD64 (local
+development) and Linux AMD64 (GitHub Actions). After changing provider versions,
+refresh both platform checksums before committing:
+
+```powershell
+terraform providers lock -platform=windows_amd64 -platform=linux_amd64
+```
+
+CI uses `terraform init -lockfile=readonly`, so missing Linux checksums can cause
+the following `terraform validate` step to reject the cached provider. Commit
+the updated `.terraform.lock.hcl` and start a new workflow run on that commit;
+rerunning an older workflow run still uses its original commit and lock file.
+
 The plan creates a resource group, Consumption environment, container app, and a
 user-assigned identity with an environment-scoped GitHub federation credential.
 The identity receives **Container Apps Contributor** on this app only. Terraform
