@@ -55,13 +55,26 @@ jobs:
           image="ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
           docker build --platform linux/amd64 --tag "$image" \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" .
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo 'Production container smoke test failed; container state and logs follow.' >&2
+              docker inspect --format '{{json .State}}' feedback-smoke || true
+              docker logs feedback-smoke || true
+            fi
+            docker rm --force feedback-smoke >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
           docker run --detach --name feedback-smoke \
             --publish 127.0.0.1:3200:3000 --env FEEDBACK_MODE=demo "$image"
-          trap 'docker rm --force feedback-smoke >/dev/null' EXIT
-          curl --fail --retry 15 --retry-connrefused --retry-delay 2 \
+          # Docker can reset connections until Node has started listening.
+          curl --fail --retry 15 --retry-all-errors --retry-delay 2 \
+            --retry-max-time 60 --connect-timeout 2 --max-time 5 \
             http://127.0.0.1:3200/api/config -o "$RUNNER_TEMP/config.json"
           node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1])); if(c.mode!=="demo" || !c.projects.length) process.exit(1)' "$RUNNER_TEMP/config.json"
-          curl --fail http://127.0.0.1:3200/ --output /dev/null
+          curl --fail --connect-timeout 2 --max-time 5 \
+            http://127.0.0.1:3200/ --output /dev/null
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
       - name: Publish to GitHub Container Registry
