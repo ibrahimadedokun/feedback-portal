@@ -125,6 +125,25 @@ $env:TF_VAR_aws_credentials = '{"access_key_id":"REPLACE","secret_access_key":"R
 # Temporary credentials also require a session_token property and expire.
 ```
 
+If you already use AWS CLI v2, load its resolved credentials in the same
+PowerShell session instead of copying keys manually:
+
+```powershell
+.\Set-AwsCredentials.ps1
+# Or select a named profile:
+# .\Set-AwsCredentials.ps1 -Profile YOUR_PROFILE
+terraform plan -out=deployment.tfplan
+```
+
+The helper uses [AWS CLI credential export](https://docs.aws.amazon.com/cli/latest/reference/configure/export-credentials.html)
+and includes the session token when present. Authenticate your profile first.
+Terraform does not automatically read AWS CLI profiles or `AWS_ACCESS_KEY_ID`
+into `aws_credentials`: this Azure deployment needs the explicit Terraform input
+to populate the container's secrets. A valid topic ARN alone is insufficient.
+Temporary credentials expire inside the deployed container too; refresh the
+credentials and apply again before expiry. The preconditions check input format
+and presence, not whether AWS grants `sns:Publish` permission.
+
 These values are stored as Azure Container Apps secrets and referenced by server
 environment variables. Terraform also records their plaintext values in state;
 keep state private and backed up. For team use, configure an access-controlled

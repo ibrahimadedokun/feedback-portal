@@ -117,11 +117,15 @@ resource "azurerm_container_app" "app" {
     # current release before removing this rule or recreating the app.
     ignore_changes = [template[0].container[0].image]
     precondition {
-      condition = var.feedback_mode != "sns" || (
-        can(regex("^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:.+$", var.sns_topic_arn)) &&
-        try(length(var.aws_credentials.access_key_id) > 0 && length(var.aws_credentials.secret_access_key) > 0, false)
+      condition     = var.feedback_mode != "sns" || can(regex("^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:.+$", var.sns_topic_arn))
+      error_message = "SNS mode requires sns_topic_arn to be a valid AWS SNS topic ARN."
+    }
+    precondition {
+      condition = var.feedback_mode != "sns" || try(
+        length(trimspace(var.aws_credentials.access_key_id)) > 0 && length(trimspace(var.aws_credentials.secret_access_key)) > 0,
+        false
       )
-      error_message = "SNS mode requires a valid topic ARN and AWS credentials permitted to publish to that topic."
+      error_message = "SNS mode requires aws_credentials with non-empty access_key_id and secret_access_key. In PowerShell run ./Set-AwsCredentials.ps1 (optionally -Profile YOUR_PROFILE), or set TF_VAR_aws_credentials to a JSON object before planning. AWS CLI credentials are not automatically passed to the Azure container. The identity must have sns:Publish permission on sns_topic_arn."
     }
   }
 }
@@ -134,12 +138,11 @@ resource "azurerm_user_assigned_identity" "github" {
 }
 
 resource "azurerm_federated_identity_credential" "github" {
-  name                = "github-azure-production"
-  resource_group_name = azurerm_resource_group.app.name
-  parent_id           = azurerm_user_assigned_identity.github.id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = "https://token.actions.githubusercontent.com"
-  subject             = var.github_oidc_subject
+  name      = "github-azure-production"
+  parent_id = azurerm_user_assigned_identity.github.id
+  audience  = ["api://AzureADTokenExchange"]
+  issuer    = "https://token.actions.githubusercontent.com"
+  subject   = var.github_oidc_subject
 }
 
 resource "azurerm_role_assignment" "github" {
