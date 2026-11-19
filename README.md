@@ -1,6 +1,6 @@
 # Feedback Studio
 
-A responsive feedback portal for **FootieLineup**, built from the supplied wireframe. A warm, editorial desktop layout becomes a focused single-column form on mobile.
+A responsive feedback platform for any application, with a configurable project list. A warm, editorial desktop layout becomes a focused single-column form on mobile.
 
 ## Run locally
 
@@ -36,7 +36,7 @@ Edit `.env` using `.env.example` as a reference:
 | `PORT`              | `3000`                                                                                                        |
 | `FEEDBACK_MODE`     | `demo` for local testing, `sns` for real delivery                                                             |
 | `AWS_REGION`        | `eu-west-2` — replace if your SNS topic is in another region                                                  |
-| `SNS_TOPIC_ARN`     | `arn:aws:sns:eu-west-2:123456789012:footielineup-feedback` — **mock**, replace the account, region, and topic |
+| `SNS_TOPIC_ARN`     | `arn:aws:sns:eu-west-2:123456789012:feedback-portal` — **mock**, replace the account, region, and topic |
 | `AWS_ACCESS_KEY_ID` | Optional local access key; leave unset when using a profile or IAM role                                        |
 | `AWS_SECRET_ACCESS_KEY` | Optional local secret key; leave unset when using a profile or IAM role                                    |
 | `AWS_SESSION_TOKEN` | Supply only when using temporary AWS credentials                                                              |
@@ -56,7 +56,7 @@ For deployed environments, use an IAM role and the AWS SDK default credential pr
     {
       "Effect": "Allow",
       "Action": "sns:Publish",
-      "Resource": "arn:aws:sns:eu-west-2:123456789012:footielineup-feedback"
+      "Resource": "arn:aws:sns:eu-west-2:123456789012:feedback-portal"
     }
   ]
 }
@@ -69,7 +69,7 @@ The SNS message is JSON containing `id`, `project`, `rating`, `likes`, `improvem
 
 ## Project list
 
-The server reads the selector options and URLs directly from `projects.json`. Add an `id`, `name`, `description`, and HTTP(S) `url` for each project; use `null` to hide the project link. IDs are validated on submission.
+The server reads the selector options and URLs directly from `projects.json`. The bundled projects are examples; add, replace, or remove entries to collect feedback for your own applications. Provide an `id`, `name`, `description`, and HTTP(S) `url` for each project; use `null` to hide the project link. IDs are validated on submission. The platform's branding and feedback flow are independent of the configured projects.
 
 ## Deploy to AWS
 
@@ -109,7 +109,7 @@ The deployment workflow runs backend and desktop/mobile browser tests before req
 ## API
 
 - `GET /api/config`: public project metadata and delivery mode.
-- `POST /api/feedback`: JSON `{ "project": "footielineup", "rating": 5, "likes": "…", "improvements": "…" }`. Rating must be an integer from 1–5; both text fields must contain non-whitespace text and be at most 2,000 characters. Request bodies are limited to 16 KiB.
+- `POST /api/feedback`: JSON `{ "project": "<project-id>", "rating": 5, "likes": "…", "improvements": "…" }`. Replace `<project-id>` with an `id` from `projects.json`. Rating must be an integer from 1–5; both text fields must contain non-whitespace text and be at most 2,000 characters. Request bodies are limited to 16 KiB.
 
 ## Deployment notes
 

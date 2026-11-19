@@ -4,5 +4,11 @@
     "name": "FootieLineup",
     "description": "Your match. Your lineup.",
     "url": "https://app-footielineup-jv7nog.azurewebsites.net/"
+  },
+  {
+    "id": "specificationportal",
+    "name": "Food Specification Portal",
+    "description": "Food and Drinks Specification Management. All in One Place.",
+    "url": "https://d3dot5btz1vg5z.cloudfront.net/"
   }
 ]

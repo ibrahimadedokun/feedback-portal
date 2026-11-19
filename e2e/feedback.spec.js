@@ -21,10 +21,10 @@ test("responsive feedback flow with validation, rating, and reset", async ({
   await expect(page.locator("#rating-caption")).toHaveText("Really good");
   await page
     .getByLabel("What do you love about it?")
-    .fill("Creating my matchday lineup.");
+    .fill("The features are easy to use.");
   await page
     .getByLabel("What could be even better?")
-    .fill("Add more formations.");
+    .fill("Add more filtering options.");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -49,7 +49,7 @@ test("delivery failure retains feedback and allows retry", async ({ page }) => {
     .getByRole("radio", { name: "5 stars — Love it!", exact: true })
     .check();
   await page.getByLabel("What do you love about it?").fill("The design");
-  await page.getByLabel("What could be even better?").fill("More teams");
+  await page.getByLabel("What could be even better?").fill("Clearer navigation");
   await page.route("**/api/feedback", (route) =>
     route.fulfill({
       status: 502,

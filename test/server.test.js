@@ -10,7 +10,7 @@ const valid = {
   project: configuredProjects[0].id,
   rating: 5,
   likes: " Easy to use ",
-  improvements: " More formations ",
+  improvements: " More filtering options ",
 };
 async function withApp(config, run) {
   const server = createApp(config);
@@ -70,7 +70,7 @@ test("SNS submission publishes a validated, trimmed payload before success", asy
       assert.equal(response.status, 200);
       assert.equal((await response.json()).mode, "sns");
       assert.equal(message.likes, "Easy to use");
-      assert.equal(message.improvements, "More formations");
+      assert.equal(message.improvements, "More filtering options");
       assert.equal(message.rating, 5);
       assert.ok(message.id);
       assert.ok(message.submittedAt);

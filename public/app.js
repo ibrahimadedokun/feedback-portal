@@ -82,7 +82,7 @@ form.addEventListener("submit", async (event) => {
     $("success-message").textContent =
       result.mode === "demo"
         ? "Thanks for taking it for a spin! This was a demo submission. Your feedback was not stored or delivered."
-        : "Your feedback has been sent. Thank you for helping shape the next chapter of FootieLineup.";
+        : "Your feedback has been sent. Thank you for helping shape the next chapter.";
     form.hidden = true;
     $("success-panel").hidden = false;
     $("success-panel").focus();
