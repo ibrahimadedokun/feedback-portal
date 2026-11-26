@@ -1,0 +1,64 @@
+name: Build Feedback API image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'feedback-api/Feedback.Api/**'
+      - '.github/workflows/api-container.yml'
+  pull_request:
+    paths:
+      - 'feedback-api/Feedback.Api/**'
+      - '.github/workflows/api-container.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feedback-api-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Linux container
+        working-directory: feedback-api/Feedback.Api
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/feedback-api"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$image:sha-$GITHUB_SHA" .
+      - name: Smoke test container without publishing SNS messages
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name feedback-api-smoke -p 8080:8080 \
+            -e AWS__Region=eu-west-2 \
+            -e AWS__AccessKeyId=smoke-test \
+            -e AWS__SecretAccessKey=smoke-test \
+            -e Sns__TopicArn=arn:aws:sns:eu-west-2:123456789012:smoke-test \
+            "$IMAGE:sha-$GITHUB_SHA"
+          trap 'docker logs feedback-api-smoke; docker rm -f feedback-api-smoke' EXIT
+          curl --fail --retry 20 --retry-all-errors --retry-delay 2 http://localhost:8080/health
+          status=$(curl -s -o /tmp/validation.json -w '%{http_code}' \
+            -H 'Content-Type: application/json' -d '{"message":""}' http://localhost:8080/messages)
+          test "$status" = 400
+          grep -q 'Message is required' /tmp/validation.json
+      - name: Publish to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker tag "$IMAGE:sha-$GITHUB_SHA" "$IMAGE:latest"
+          docker push "$IMAGE:latest"
+          echo "Image: $IMAGE:sha-$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

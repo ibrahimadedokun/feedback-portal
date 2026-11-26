@@ -1,0 +1,6 @@
+azure_subscription_id = "<azure-subscription-id>"
+location              = "eastus"
+environment           = "dev"
+aws_region            = "eu-west-2"
+sns_topic_name        = "feedback-topic"
+container_image       = "ghcr.io/<github-owner>/feedback-api:sha-<full-commit-sha>"

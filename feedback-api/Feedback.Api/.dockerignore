@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!Feedback.Api/
+!Feedback.Api/**
+Feedback.Api/bin/
+Feedback.Api/obj/
+Feedback.Api/Properties/
+Feedback.Api/*.http
+Feedback.Api/appsettings.Development.json
