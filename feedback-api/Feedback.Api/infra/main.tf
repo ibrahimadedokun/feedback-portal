@@ -120,25 +120,6 @@ resource "azurerm_container_app" "api" {
         secret_name = "aws-secret-access-key"
       }
 
-      startup_probe {
-        transport               = "HTTP"
-        port                    = 8080
-        path                    = "/health"
-        interval_seconds        = 5
-        failure_count_threshold = 30
-      }
-      readiness_probe {
-        transport        = "HTTP"
-        port             = 8080
-        path             = "/health"
-        interval_seconds = 10
-      }
-      liveness_probe {
-        transport        = "HTTP"
-        port             = 8080
-        path             = "/health"
-        interval_seconds = 30
-      }
     }
   }
 
