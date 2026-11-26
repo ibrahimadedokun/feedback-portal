@@ -1,128 +1,88 @@
 # Feedback Studio
 
-A responsive feedback platform for any application, with a configurable project list. A warm, editorial desktop layout becomes a focused single-column form on mobile.
+A responsive, static feedback frontend with a project selector, star rating, and two feedback fields. It calls a separately hosted REST API directly from the browser.
 
 ## Run locally
 
-Requires **Node.js 26 or newer** and npm. `.nvmrc` selects Node.js 26 for local version managers and GitHub Actions; Elastic Beanstalk uses the same major version. No build step, database, or frontend framework is needed.
+Use Node.js 26+ and npm:
 
 ```sh
 npm ci
-cp .env.example .env
 npm run dev
 ```
 
-Open `http://localhost:3000`. Use `npm start` to run without the development watcher. Environment changes require a server restart.
+Open http://localhost:3000. Start the external API separately. There is no build step or environment file. Serve the app through HTTP rather than opening index.html directly.
 
-The example config starts in **demo mode**. Demo submissions are validated, but **not stored or sent to AWS**. Both the form and confirmation explicitly say this. The example SNS topic ARN is a placeholder; replace it before enabling delivery. Project links are configured in `projects.json`. `.env` is ignored by Git.
+`npm start` serves public/ on the host's PORT, defaulting to 8080. `npm run dev` uses port 3000. Both commands disable asset caching for configuration changes.
 
-## Features
+## Configure the API
 
-- Project selector and configurable application link.
-- Accessible native radio buttons for five colour-coded stars, with hover previews and keyboard navigation.
-- Two required feedback fields, character counts, and client/server validation.
-- Loading, sending, success, retry, and connection-error states.
-- Feedback is kept in the form after delivery errors; successful submissions can be reset.
-- Server-side AWS SNS integration; no credentials or topic ARN are exposed in frontend configuration.
-- Request size limits, basic in-memory rate limiting, same-origin checks, and security headers.
-- Locally served assets, system fonts, and CSS/SVG artwork; no external font or image services.
+Edit [public/config.js](public/config.js):
 
-## Configuration
+```js
+export const api = {
+  baseUrl: "https://localhost:7026",
+  healthPath: "/health",
+  messagesPath: "/messages",
+};
+```
 
-Edit `.env` using `.env.example` as a reference:
+Paths are appended to the base URL, including any base path. For deployment, set a public HTTPS API URL before publishing: localhost refers to the visitor's own machine. Configuration is public and must not contain secrets.
 
-| Variable            | Example / purpose                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `PORT`              | `3000`                                                                                                        |
-| `FEEDBACK_MODE`     | `demo` for local testing, `sns` for real delivery                                                             |
-| `AWS_REGION`        | `eu-west-2` — replace if your SNS topic is in another region                                                  |
-| `SNS_TOPIC_ARN`     | `arn:aws:sns:eu-west-2:123456789012:feedback-portal` — **mock**, replace the account, region, and topic |
-| `AWS_ACCESS_KEY_ID` | Optional local access key; leave unset when using a profile or IAM role                                        |
-| `AWS_SECRET_ACCESS_KEY` | Optional local secret key; leave unset when using a profile or IAM role                                    |
-| `AWS_SESSION_TOKEN` | Supply only when using temporary AWS credentials                                                              |
+The API must allow the frontend's origin through CORS. Local development uses http://localhost:3000; production uses the deployed frontend origin. Allow GET and POST, the Content-Type header, and the OPTIONS preflight. Trust the API's HTTPS development certificate in the browser when working locally.
 
-For deployed environments, use an IAM role and the AWS SDK default credential provider chain instead of static keys. The example leaves credential variables commented out so a role or profile can supply them. Never commit real credentials; use your host's secure environment settings or secret manager. `REGION` and `AWS_DEFAULT_REGION` remain supported as region fallbacks; `AWS_REGION` takes precedence. The old unprefixed credential names (`ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, and `SESSION_TOKEN`) were not read by the SDK; use the `AWS_` names above.
+On initial load, GET /health starts in parallel with fetching the project list. A failed check or a 15-second timeout displays a status message without blocking the form.
 
-### Enable real SNS delivery
-
-1. Create a **standard SNS topic** in your chosen AWS region.
-2. Add an email, HTTPS, SQS, or other supported subscription. Confirm subscriptions where required (email subscribers must accept the confirmation email).
-3. Grant the server's AWS identity permission to publish to that topic. Example least-privilege policy (replace the mock ARN):
+Submission sends POST /messages with Content-Type: application/json and a PublishMessageRequest body:
 
 ```json
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "sns:Publish",
-      "Resource": "arn:aws:sns:eu-west-2:123456789012:feedback-portal"
-    }
-  ]
+  "message": "Project: FootieLineup (footielineup)\nRating: 4/5\n\nWhat do you love about it?\nEasy to use.\n\nWhat could be even better?\nMore filters.",
+  "subject": "New FootieLineup feedback"
 }
 ```
 
-4. Replace the mock settings, set `FEEDBACK_MODE=sns`, and restart the server. Permit outbound HTTPS to the SNS endpoint for the configured region (for example `sns.eu-west-2.amazonaws.com`).
-5. Submit a test and confirm receipt at your subscriber. A success response means SNS accepted the message; downstream delivery depends on the subscription.
+The subject names the project. The message includes the project name and ID, rating, and both trimmed feedback fields. The frontend sends both properties as strings; the API schema also accepts a null subject.
 
-The SNS message is JSON containing `id`, `project`, `rating`, `likes`, `improvements`, and `submittedAt`. No real SNS delivery has been tested with the mock settings. Missing SNS configuration returns 503; an AWS publish failure returns 502. Neither displays a successful delivery confirmation.
+Any 2xx response confirms submission, including empty or plain-text responses. HTTP errors, network errors, and timeouts retain the form contents for retry. Submission times out after 15 seconds. After an uncertain timeout, check delivery before resubmitting to avoid duplicates.
 
-## Project list
+## Configure projects
 
-The server reads the selector options and URLs directly from `projects.json`. The bundled projects are examples; add, replace, or remove entries to collect feedback for your own applications. Provide an `id`, `name`, `description`, and HTTP(S) `url` for each project; use `null` to hide the project link. IDs are validated on submission. The platform's branding and feedback flow are independent of the configured projects.
+Edit [public/projects.json](public/projects.json). Each entry has an id, name, description, and HTTP(S) url. Use null for url to hide its link. Keep IDs unique and include at least one project. These files are served directly; refresh the page after changes.
 
-## Deploy to AWS
+Visitors must choose a rating from 1 to 5 and complete both feedback fields. Each field accepts up to 2,000 characters. Validation and character counts run in the browser.
 
-See the [AWS deployment guide](./terraform/README.md) for the Elastic Beanstalk
-setup with a CloudFront HTTPS endpoint, Terraform steps, GitHub Actions
-configuration, and cost limitations. CloudFront supplies a `cloudfront.net`
-hostname and certificate, so no custom domain or ACM certificate is required.
-
-## Deploy to Azure
-
-See the [Azure deployment guide](./terraform/azure/README.md) for a separate
-Terraform environment and GitHub Actions workflow. It uses Container Apps
-Consumption with scale to zero, a public GHCR image, and a managed HTTPS address.
-No Azure container registry, database, dedicated compute, or Log Analytics
-workspace is provisioned. Demo mode is the default; real delivery uses the
-existing AWS SNS integration. Monthly free allowances are usage limits, not a
-guarantee of a zero bill.
-
-## Tests
+## Test
 
 ```sh
-npm test
 npx playwright install chromium
-npm run test:browser
+npm test
 ```
 
-If Chromium is already installed, use it without downloading another browser:
+Playwright starts a static server on port 3100 and runs desktop/mobile tests with a mocked external API. Tests cover the JSON payload, required fields, rating, reset, overflow, parallel initialization, service errors, and submission retries. They do not send real feedback. For a preinstalled Chromium binary, set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH. Reports and test output are ignored by Git.
 
-```sh
-PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:browser
-```
+## Deploy
 
-The backend suite covers demo mode, SNS publishing with a mock publisher, payload validation, missing configuration, delivery failures, request limits, and cross-origin protection. Browser tests cover desktop and mobile submission, validation, rating, reset, error recovery, and overflow checks. Screenshots are written to the ignored `test-results/` directory.
+Any static web host can serve the contents of public/. Publish config.js and projects.json alongside index.html, app.js, and styles.css. Files currently assume hosting at the domain root. Set the production API URL and CORS origin before testing delivery.
 
-The deployment workflow runs backend and desktop/mobile browser tests before requesting AWS credentials. Live AWS delivery remains unverified until real settings are supplied.
+Hosting is provisioned separately from publishing the frontend:
 
-## API
+- [AWS: private S3 + CloudFront Free](terraform/README.md), published from develop using GitHub OIDC.
+- [Azure: Static Web Apps Free](terraform/azure/README.md), published from main using a deployment token.
 
-- `GET /api/config`: public project metadata and delivery mode.
-- `POST /api/feedback`: JSON `{ "project": "<project-id>", "rating": 5, "likes": "…", "improvements": "…" }`. Replace `<project-id>` with an `id` from `projects.json`. Rating must be an integer from 1–5; both text fields must contain non-whitespace text and be at most 2,000 characters. Request bodies are limited to 16 KiB.
+Run Terraform in the relevant directory, configure the GitHub settings from its outputs, then run the deployment workflow. Only public/ is uploaded; npm and the local static server are development tools.
 
-## Deployment notes
+Existing infrastructure needs a migration plan review: applying these configurations retires Beanstalk and Container Apps resources. See each guide for resource removal, publishing order, and hostname changes.
 
-Run this as a Node service behind an HTTPS reverse proxy, binding to the port supplied by your host. There is no separate static build output. No feedback is retained locally. The current limiter allows 20 requests per connection IP per minute and is process-local; behind a proxy it may group visitors together. Use shared rate limiting, bot protection, monitoring, and appropriate privacy/retention policies before a high-traffic public launch. SNS publish retries and uncertain network responses can result in duplicate messages; consumers can deduplicate using each message's `id`. A manually retried submission receives a new ID.
+Both deployment workflows run browser tests before publishing. Deployment smoke checks fetch static assets. Live API connectivity, CORS, and actual message delivery require verification with your separately hosted API.
 
-## Layout
+## Repository layout
 
 ```text
-public/                 Responsive UI, styles, and browser interactions
-projects.json          Project selector data used by the server
-server.js               Static server, validation, and SNS publisher
-.env.example            Editable mock configuration
-playwright.config.js    Desktop/mobile browser-test configuration
-test/                   Backend tests
-e2e/                    Browser tests
+public/                  Static page, styles, browser code, and configuration
+e2e/                     Playwright browser tests
+playwright.config.js     Desktop/mobile test settings and static test server
+.github/workflows/       AWS and Azure deployment workflows
+terraform/               AWS frontend hosting
+terraform/azure/         Azure frontend hosting
 ```

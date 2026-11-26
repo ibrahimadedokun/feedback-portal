@@ -1,230 +1,67 @@
-# AWS deployment
+# AWS static frontend hosting
 
-This Terraform configuration deploys the existing Node.js application to a
-single-instance AWS Elastic Beanstalk environment with a CloudFront HTTPS
-endpoint. It creates a private S3 deployment-bundle bucket, narrowly scoped IAM
-roles, and a GitHub Actions OIDC role. The first application bundle is deployed by
-Terraform; later pushes to `main` are deployed by GitHub Actions.
-
-CloudFront provides an AWS-managed `https://...cloudfront.net` address and
-certificate. No custom domain, ACM certificate, or Application Load Balancer is
-needed. HTTP requests to that address redirect to HTTPS. Caching is disabled,
-all application methods (including feedback POSTs) are forwarded, and viewer
-headers, cookies, and query strings reach the app. Forwarding both `Host` and
-`Origin` preserves the server's same-origin validation.
-
-Feedback is published to your existing standard SNS topic. Terraform does not
-create or manage the topic or its email subscriptions. Set `sns_topic_arn` to
-its ARN; the application receives permission to publish only to that topic.
-
-The application runs on Node.js 26 on Amazon Linux 2023. Provider versions are
-recorded in `.terraform.lock.hcl`; this configuration uses AWS provider 6.x.
-When upgrading an existing checkout, run `terraform init -upgrade` and review
-`terraform plan` before applying the provider and platform changes.
-
-## Cost and availability
-
-Elastic Beanstalk has no separate service fee, but the AWS resources it creates
-are billed. This configuration uses CloudFront, one `t3.micro` EC2 instance,
-and no load balancer, NAT Gateway, database, or custom domain. A single instance
-is not highly available and can be interrupted during
-maintenance or fail without an automatic replacement across multiple
-availability zones.
-
-There is no universally free always-on option for this existing server
-configuration. The instance, its public IPv4 address, storage, data transfer,
-SNS usage, and CloudFront requests and data transfer can incur charges. Whether
-Free Tier benefits or account credits cover them depends on your account, plan,
-region, and current AWS offers. Check
-the [AWS Free Tier terms](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier.html)
-and [Elastic Beanstalk pricing](https://aws.amazon.com/elasticbeanstalk/pricing/)
-before applying. Configure an AWS Budget or billing alert first. The lowest-cost
-way to stop ongoing environment charges when you are done testing is
-`terraform destroy`.
-
-The public `application_url` uses HTTPS between the browser and CloudFront.
-CloudFront connects to Beanstalk over HTTP, and the Beanstalk origin remains
-publicly reachable over HTTP. This is not end-to-end TLS. For sensitive feedback,
-configure a domain and certificate on the origin and change CloudFront's origin
-protocol policy to `https-only` before collecting it. An ALB alone cannot provide
-browser-trusted HTTPS on its AWS-generated hostname without a matching domain
-and certificate.
+This Terraform environment provisions a private S3 bucket, a signed CloudFront origin, a CloudFront distribution, its required dedicated WAF web ACL, a CloudFront Free subscription, and a GitHub OIDC role for publishing. No application server or container runs in AWS.
 
 ## Prerequisites
 
-1. An AWS account with permissions to create Elastic Beanstalk environments,
-   EC2/IAM/S3 resources, a CloudFront distribution, and an IAM OIDC provider.
-2. Terraform 1.5 or later, AWS CLI v2, and Git installed locally.
-3. AWS credentials configured locally through AWS IAM Identity Center/SSO or
-   another supported AWS credential provider. Do not put access keys in
-   `terraform.tfvars` or GitHub.
-4. A GitHub repository containing this project. The workflow below assumes the
-   `main` branch.
-5. An existing standard SNS topic with your email subscription confirmed.
+Use Terraform 1.7+ and an AWS provisioning identity authorized to manage S3, CloudFront, WAF, IAM/OIDC, and Pricing Plan Manager subscriptions. The AWS provider is locked to a version that supports aws_pricingplanmanager_subscription.
 
-Elastic Beanstalk uses the account's default VPC if one exists. If it does not,
-provide a VPC and subnet IDs in `terraform.tfvars`. The instance needs a public
-route so CloudFront can reach it without a load balancer.
+CloudFront flat-rate plans require an eligible account; accounts using the AWS Free Tier account plan are excluded by [AWS's eligibility rules](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html). The subscription is explicitly FREE with no paid fallback. Its dedicated WAF ACL is required for eligibility; no custom filtering rules or paid logging are configured.
 
-## Deploy the infrastructure
+The Free plan's published allowances include 1 million requests, 100 GB transfer, and S3 storage credits. S3 operations and services outside the plan can still be charged. Creation starts with separate resources before subscription activation: verify cloudfront_plan_status is ACTIVE before relying on coverage. A failed subscription can leave those resources billed at their normal rates. See [CloudFront pricing](https://aws.amazon.com/cloudfront/pricing/).
 
-Run these commands from the repository root in PowerShell:
+## Configure and provision
+
+Set the public HTTPS API URL in [public/config.js](../public/config.js) before publishing. The browser calls the external API directly. Configure the API's CORS policy for the frontend hostname.
+
+From this directory, copy terraform.tfvars.example to terraform.tfvars. Set github_repository, aws_region, and github_branch. The workflow deploys develop; its trigger and github_branch must match. Set github_repository_ids if the repository uses immutable OIDC subjects. The WAF ACL is created through a provider alias in us-east-1, independently of the S3 region.
 
 ```powershell
-aws configure sso
-aws sso login --profile YOUR_PROFILE
-$env:AWS_PROFILE = "YOUR_PROFILE"
-aws sts get-caller-identity
-
-Copy-Item terraform\terraform.tfvars.example terraform\terraform.tfvars
-```
-
-Edit `terraform\terraform.tfvars` and set `github_repository` to the exact
-`OWNER/REPOSITORY` value. Set `sns_topic_arn` to your existing topic ARN and
-remove any old `feedback_email` setting. Choose `aws_region` for the application
-infrastructure; the server's SNS region is read from the topic ARN, so the topic
-can be in a different region. For a topic in another AWS account, its owner must
-also allow the application's IAM role to publish in the topic's access policy.
-
-If the account has no default VPC, set `vpc_id` and `subnet_ids` to public
-subnets in that VPC. Do not include private-only subnets unless you also design
-and pay for outbound networking.
-
-Review the plan, then create the resources:
-
-```powershell
-Set-Location terraform
 terraform init
 terraform fmt -check
 terraform validate
-terraform plan
-terraform apply
-```
-
-Review the plan carefully before approving `terraform apply`. It creates
-billable resources. The application URL can be retrieved with:
-
-```powershell
+terraform test
+terraform plan -out=hosting.tfplan
+terraform apply hosting.tfplan
 terraform output -raw application_url
+terraform output -raw cloudfront_plan_status
+terraform output -json github_actions_variables
 ```
 
-The environment is initially deployed from the repository bundle by Terraform.
-You can open the URL and check `GET /api/config` before configuring automatic
-deployments.
+terraform test uses mocked providers and creates no cloud resources. Review the saved plan before applying. Terraform provisions infrastructure only; publish public/ next, otherwise the new bucket has no index.html. S3 public access is blocked, object ACLs are disabled, and its bucket policy permits reads only from this CloudFront distribution through Origin Access Control.
 
-For an existing deployment, run the same plan/apply commands without replacing
-your `terraform.tfvars`. The plan should add CloudFront and update outputs while
-keeping the existing Beanstalk environment. CloudFront deployment can take
-several minutes. Use the new `application_url` after apply completes; the old
-Beanstalk URL is available separately as `beanstalk_origin_url`.
+If the account already has a GitHub OIDC provider managed elsewhere, import that provider into this state or adapt the configuration to reference the existing provider before applying. Do not create a duplicate provider URL.
 
-## Enable GitHub Actions deployments
+## Publish from GitHub Actions
 
-The Terraform-created IAM role trusts only the configured repository and
-branch. It uses GitHub's OIDC token exchange; no long-lived AWS access key is
-needed in GitHub.
+Configure the repository settings below:
 
-The deployment policy includes access to upload and read `releases/*`, create
-`github-*` application versions, update this environment's CloudFormation stack
-and Auto Scaling group, inspect infrastructure, and pass only this project's
-service and instance roles to AWS services. Beanstalk also requires access to
-its regional `elasticbeanstalk-REGION-ACCOUNT_ID` S3 bucket to stage environment
-data, even though release bundles use a separate bucket. The policy covers
-that bucket's creation, access controls, and objects. These permissions support
-application deployments to the existing environment; infrastructure changes
-continue to be managed through Terraform.
+| Setting | Kind | Terraform value |
+| --- | --- | --- |
+| AWS_ROLE_ARN | Secret | github_actions_role_arn output |
+| AWS_REGION | Variable | github_actions_variables.AWS_REGION |
+| WEBSITE_BUCKET | Variable | github_actions_variables.WEBSITE_BUCKET |
+| CLOUDFRONT_DISTRIBUTION_ID | Variable | github_actions_variables.CLOUDFRONT_DISTRIBUTION_ID |
+| AWS_APPLICATION_URL | Variable | github_actions_variables.AWS_APPLICATION_URL |
 
-For repositories using [immutable OIDC subjects](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims),
-set `github_repository_ids` in `terraform.tfvars` before applying. GitHub uses
-this format by default for repositories created after July 15, 2026. Retrieve
-`owner.id` and `id` from `https://api.github.com/repos/OWNER/REPOSITORY`:
+Run **Deploy to AWS Static Hosting** on develop or push to develop. The workflow validates and tests Terraform with mocks, runs desktop/mobile browser tests, assumes the deployment role, syncs public/ to the bucket, deletes stale assets, invalidates the CDN cache, and checks the live index and project list. API requests remain mocked in browser tests; verify real message delivery separately.
 
-```hcl
-github_repository_ids = {
-  owner_id      = "123456"
-  repository_id = "456789"
-}
-```
+The deployment role can publish only to this bucket and refresh this distribution. It has no compute, application-environment, or infrastructure-provisioning permissions. Assets use a five-minute cache lifetime; deployment waits for cache invalidation before checking the frontend.
 
-Leave this variable unset only when the repository uses the legacy subject
-without IDs. An incorrect subject causes `Not authorized to perform
-sts:AssumeRoleWithWebIdentity`. Apply the Terraform change before retrying the
-workflow, and ensure `AWS_ROLE_ARN` matches the deployment role output. Manual
-workflow runs must select the configured `github_branch`.
+## Migrate the previous deployment
 
-1. From the `terraform` directory, copy the output values:
+Keep the existing state and provider lock file. Remove obsolete environment_name, instance_type, vpc_id, and subnet_ids inputs from local tfvars or CI variable sets. The current example lists all supported inputs.
 
-   ```powershell
-   terraform output -raw github_actions_role_arn
-   terraform output -raw artifact_bucket_name
-   terraform output -raw application_name
-   terraform output -raw environment_name
-   ```
+The migration plan removes the Beanstalk application/environment and versions, compute/service roles and instance profile, deployment-artifact bucket and contents, and obsolete release lifecycle configuration. The existing CloudFront resource address remains, allowing an in-place origin change; verify the actual plan preserves the distribution and hostname.
 
-2. In GitHub, open **Settings → Secrets and variables → Actions**.
-3. Add the repository **secret** `AWS_ROLE_ARN` using the
-   `github_actions_role_arn` output.
-4. Add these repository **variables** using the corresponding outputs:
-   - `AWS_REGION`: the region in `terraform.tfvars`
-   - `DEPLOYMENT_BUCKET`: `artifact_bucket_name`
-   - `EB_APPLICATION_NAME`: `application_name`
-   - `EB_ENVIRONMENT_NAME`: `environment_name`
-5. Push a commit to `main`, or run **Actions → Deploy to AWS Elastic
-   Beanstalk → Run workflow**. The workflow installs dependencies and runs
-   backend and desktop/mobile browser tests, then packages the app, uploads it to
-   private S3, creates a Beanstalk application version, and waits for the
-   environment update to finish.
+Applying switches the origin to a new bucket that is empty until publication, so schedule the cutover and run the static deployment immediately afterward. Update GitHub settings before publishing. Remove old EB_APPLICATION_NAME, EB_ENVIRONMENT_NAME, and DEPLOYMENT_BUCKET variables. No resources from the separately hosted API belong in this state.
 
-If Terraform reports that the GitHub OIDC provider already exists in this AWS
-account, import it into this state before applying:
+Provisioning is not performed by the deployment workflow. A configuration change alone does not remove the old billable infrastructure; that happens when you explicitly apply the reviewed migration plan.
 
-```powershell
-terraform import aws_iam_openid_connect_provider.github arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com
-```
+## State, updates, and removal
 
-Replace `ACCOUNT_ID` with the account ID from `aws sts get-caller-identity`.
-If using a non-standard AWS partition, use that partition in the ARN.
+Keep Terraform state and saved plans private and backed up. The old archive/random provider requirements have been removed; initializing refreshes the lock selections. If an older state still needs those providers to destroy legacy resources, let terraform init install them during migration and run it again after applying to prune unused selections.
 
-## Verify the app
+When changing provider versions, refresh checksums with terraform providers lock -platform=windows_amd64 -platform=linux_amd64 and commit the lock file. CI initializes with -lockfile=readonly.
 
-1. Open the `application_url` output in a browser. The feedback page should
-   load over HTTPS through CloudFront from the Node.js server. Opening the same
-   CloudFront address with `http://` should redirect to `https://`.
-2. Request `/api/config` on the same host. It should return the projects from
-   `projects.json` and `"mode":"sns"`.
-3. Check that your existing topic's email subscription is confirmed.
-4. Submit test feedback only after confirming the SNS subscription and
-   understanding where the feedback will be delivered. SNS accepts messages
-   even when no email subscription is confirmed.
-5. Check the latest GitHub Actions run and the Elastic Beanstalk environment
-   health in the AWS console.
-
-## Update and clean up
-
-Push application changes to `main`; GitHub Actions deploys each revision.
-Infrastructure changes are managed separately from the `terraform` directory
-with `terraform plan` and `terraform apply`.
-
-To delete the environment and the resources Terraform created:
-
-```powershell
-Set-Location terraform
-terraform destroy
-```
-
-This removes the S3 deployment artifacts along with the application. Your
-existing SNS topic and subscriptions remain outside this configuration. Keep the
-Terraform state file private and backed up; it records resource identifiers
-and configuration.
-
-If you previously applied the configuration that created SNS resources, remove
-them from Terraform state before applying this version to preserve them:
-
-```powershell
-terraform state rm 'aws_sns_topic_subscription.feedback_email[0]'
-terraform state rm 'aws_sns_topic.feedback'
-```
-
-Run only the commands for resources present in `terraform state list`, and set
-`sns_topic_arn` to the topic you want to keep using. Review the plan to confirm
-that it does not delete any SNS resources.
+For removal, disable automatic publishing and empty only the website bucket, then review terraform plan -destroy and run terraform destroy. The bucket deliberately has no force_destroy setting. The subscription depends on the distribution and ACL, so Terraform cancels the subscription before deleting them. External API resources are unaffected.

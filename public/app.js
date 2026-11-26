@@ -1,3 +1,6 @@
+import { api } from "./config.js";
+
+const endpoint = (path) => `${api.baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 const $ = (id) => document.getElementById(id);
 const form = $("feedback-form");
 const labels = [
@@ -63,26 +66,33 @@ form.addEventListener("submit", async (event) => {
   $("submit-button").firstElementChild.textContent = "Sending your thoughts…";
   $("form-error").hidden = true;
   try {
-    const response = await fetch("/api/feedback", {
+    const project = projects.find((item) => item.id === $("project").value);
+    const response = await fetch(endpoint(api.messagesPath), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        project: $("project").value,
-        rating: selected,
-        likes: $("likes").value,
-        improvements: $("improvements").value,
+        subject: `New ${project.name} feedback`,
+        message: [
+          `Project: ${project.name} (${project.id})`,
+          `Rating: ${selected}/5`,
+          "",
+          "What do you love about it?",
+          $("likes").value.trim(),
+          "",
+          "What could be even better?",
+          $("improvements").value.trim(),
+        ].join("\n"),
       }),
       signal: AbortSignal.timeout(15000),
     });
-    const result = await response.json();
-    if (!response.ok)
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
       throw new Error(
-        result.error || "Something went wrong. Please try again.",
+        result.error || result.detail || result.title || "Something went wrong. Please try again.",
       );
+    }
     $("success-message").textContent =
-      result.mode === "demo"
-        ? "Thanks for taking it for a spin! This was a demo submission. Your feedback was not stored or delivered."
-        : "Your feedback has been sent. Thank you for helping shape the next chapter.";
+      "Your feedback has been sent. Thank you for helping shape the next chapter.";
     form.hidden = true;
     $("success-panel").hidden = false;
     $("success-panel").focus();
@@ -113,13 +123,30 @@ $("send-another").addEventListener("click", () => {
   $("project").focus();
 });
 $("year").textContent = new Date().getFullYear();
+
+// Warm up/check the external API while the project list loads independently.
+async function checkHealth() {
+  try {
+    const response = await fetch(endpoint(api.healthPath), {
+      signal: AbortSignal.timeout(15000),
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("API unavailable");
+    $("api-status").hidden = true;
+  } catch {
+    $("api-status").textContent =
+      "The feedback service may be unavailable. You can still write your feedback and try sending it.";
+    $("api-status").hidden = true;
+  }
+}
+await checkHealth();
+
 try {
-  const response = await fetch("/api/config", {
+  const response = await fetch("./projects.json", {
     signal: AbortSignal.timeout(10000),
   });
   if (!response.ok) throw new Error("Configuration unavailable");
-  const config = await response.json();
-  projects = config.projects;
+  projects = await response.json();
   for (const project of projects) {
     const option = document.createElement("option");
     option.value = project.id;
@@ -128,7 +155,6 @@ try {
     $("project").append(option);
   }
   updateProject();
-  $("demo-note").hidden = config.mode !== "demo";
   $("loading-message").hidden = true;
   form.hidden = false;
 } catch {

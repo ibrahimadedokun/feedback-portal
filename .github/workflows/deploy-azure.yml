@@ -1,157 +1,71 @@
-name: Deploy to Azure Container Apps
+name: Deploy to Azure Static Web Apps
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      deploy:
-        description: Deploy after publishing (leave off for the first image build)
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: azure-container-apps-production
+  group: azure-static-production
   cancel-in-progress: false
 
 jobs:
-  build:
-    if: github.event_name == 'workflow_dispatch' || vars.AZURE_DEPLOY_ENABLED == 'true'
+  deploy:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.AZURE_DEPLOY_ENABLED == 'true')
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image: ${{ steps.image.outputs.image }}
+    environment: azure-production
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: hashicorp/setup-terraform@v4.0.1
         with:
-          terraform_version: "1.5.7"
+          terraform_version: "1.17.2"
       - name: Validate Azure infrastructure
         run: |
           terraform -chdir=terraform/azure init -backend=false -input=false -lockfile=readonly
           terraform -chdir=terraform/azure fmt -check
           terraform -chdir=terraform/azure validate
+          terraform -chdir=terraform/azure test
       - uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
-      - name: Install dependencies and test
+      - name: Test frontend
         run: |
           npm ci
-          npm test
           npx playwright install --with-deps chromium
-          npm run test:browser
-
-      - name: Build and smoke test the production image
-        id: image
-        shell: bash
-        run: |
-          set -euo pipefail
-          image="ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
-          docker build --platform linux/amd64 --tag "$image" \
-            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" .
-          cleanup() {
-            status=$?
-            if [ "$status" -ne 0 ]; then
-              echo 'Production container smoke test failed; container state and logs follow.' >&2
-              docker inspect --format '{{json .State}}' feedback-smoke || true
-              docker logs feedback-smoke || true
-            fi
-            docker rm --force feedback-smoke >/dev/null 2>&1 || true
-            exit "$status"
-          }
-          trap cleanup EXIT
-          docker run --detach --name feedback-smoke \
-            --publish 127.0.0.1:3200:3000 --env FEEDBACK_MODE=demo "$image"
-          # Docker can reset connections until Node has started listening.
-          curl --fail --retry 15 --retry-all-errors --retry-delay 2 \
-            --retry-max-time 60 --connect-timeout 2 --max-time 5 \
-            http://127.0.0.1:3200/api/config -o "$RUNNER_TEMP/config.json"
-          node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1])); if(c.mode!=="demo" || !c.projects.length) process.exit(1)' "$RUNNER_TEMP/config.json"
-          curl --fail --connect-timeout 2 --max-time 5 \
-            http://127.0.0.1:3200/ --output /dev/null
-          echo "image=$image" >> "$GITHUB_OUTPUT"
-
-      - name: Publish to GitHub Container Registry
+          npm test
+      - name: Validate deployment settings
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE: ${{ steps.image.outputs.image }}
+          DEPLOYMENT_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          APPLICATION_URL: ${{ vars.AZURE_APPLICATION_URL }}
         run: |
           set -euo pipefail
-          umask 077
-          export DOCKER_CONFIG
-          DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/ghcr-docker.XXXXXX")
-          cleanup_registry_login() {
-            status=$?
-            docker logout ghcr.io >/dev/null 2>&1 || true
-            rm -rf -- "$DOCKER_CONFIG"
-            exit "$status"
-          }
-          trap cleanup_registry_login EXIT
-          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          # Publish the tested Linux image directly. This excludes the local
-          # image index and attestations, which can fail during GHCR publication.
-          docker push --platform linux/amd64 "$IMAGE"
-          echo "Published image: \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
-          echo 'For the first deployment, make the GHCR package public and use this image in terraform/azure/terraform.tfvars.' >> "$GITHUB_STEP_SUMMARY"
-
-  deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.deploy)
-    runs-on: ubuntu-latest
-    environment: azure-production
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Validate deployment settings and anonymous image access
-        shell: bash
-        env:
-          IMAGE: ${{ needs.build.outputs.image }}
-          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          AZURE_CONTAINER_APP: ${{ vars.AZURE_CONTAINER_APP }}
-        run: |
-          set -euo pipefail
-          : "${AZURE_CLIENT_ID:?Set AZURE_CLIENT_ID}"
-          : "${AZURE_TENANT_ID:?Set AZURE_TENANT_ID}"
-          : "${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID}"
-          : "${AZURE_RESOURCE_GROUP:?Set AZURE_RESOURCE_GROUP}"
-          : "${AZURE_CONTAINER_APP:?Set AZURE_CONTAINER_APP}"
-          docker manifest inspect "$IMAGE" >/dev/null || {
-            echo 'Make the GHCR package public before deploying; Azure pulls without registry credentials.' >&2
-            exit 1
-          }
-
-      - name: Sign in to Azure with GitHub OIDC
-        uses: azure/login@v2
+          : "${DEPLOYMENT_TOKEN:?Set AZURE_STATIC_WEB_APPS_API_TOKEN}"
+          : "${APPLICATION_URL:?Set AZURE_APPLICATION_URL}"
+      - name: Publish frontend
+        uses: Azure/static-web-apps-deploy@v1
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Deploy and verify HTTPS
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: public
+          api_location: ""
+          output_location: ""
+          skip_app_build: true
+          skip_api_build: true
+          production_branch: main
+      - name: Verify frontend
         shell: bash
         env:
-          IMAGE: ${{ needs.build.outputs.image }}
-          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          CONTAINER_APP: ${{ vars.AZURE_CONTAINER_APP }}
+          APPLICATION_URL: ${{ vars.AZURE_APPLICATION_URL }}
         run: |
           set -euo pipefail
-          az extension add --name containerapp --upgrade --only-show-errors
-          az containerapp update --resource-group "$RESOURCE_GROUP" \
-            --name "$CONTAINER_APP" --image "$IMAGE" --output none
-          host=$(az containerapp show --resource-group "$RESOURCE_GROUP" \
-            --name "$CONTAINER_APP" --query properties.configuration.ingress.fqdn --output tsv)
-          test -n "$host"
-          curl --fail --retry 12 --retry-all-errors --retry-delay 5 \
-            --connect-timeout 10 --max-time 30 "https://$host/api/config"
-          echo "Application: https://$host" >> "$GITHUB_STEP_SUMMARY"
+          curl --fail --retry 5 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 10 --max-time 30 "$APPLICATION_URL/" --output /dev/null
+          curl --fail --connect-timeout 10 --max-time 30 \
+            "$APPLICATION_URL/projects.json" --output "$RUNNER_TEMP/projects.json"
+          node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1])); if(!Array.isArray(p) || !p.length) process.exit(1)' "$RUNNER_TEMP/projects.json"
+          echo "Frontend: $APPLICATION_URL" >> "$GITHUB_STEP_SUMMARY"

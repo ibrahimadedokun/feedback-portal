@@ -1,47 +1,52 @@
-data "aws_cloudfront_cache_policy" "disabled" {
-  name = "Managed-CachingDisabled"
+data "aws_cloudfront_cache_policy" "optimized" {
+  name = "Managed-CachingOptimized"
 }
 
-data "aws_cloudfront_origin_request_policy" "all_viewer" {
-  name = "Managed-AllViewer"
+resource "aws_cloudfront_origin_access_control" "site" {
+  name                              = "${var.project_name}-s3"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }
 
+# CloudFront-scoped WAF resources must be created in us-east-1.
+resource "aws_wafv2_web_acl" "site" {
+  provider = aws.us_east_1
+  name     = "${var.project_name}-static"
+  scope    = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = false
+    metric_name                = "${var.project_name}-static"
+    sampled_requests_enabled   = false
+  }
+}
+
+# Keep this address so an existing distribution can switch origins in place.
 resource "aws_cloudfront_distribution" "app" {
-  enabled         = true
-  is_ipv6_enabled = true
-  comment         = "${var.project_name} HTTPS endpoint"
+  enabled             = true
+  is_ipv6_enabled     = true
+  default_root_object = "index.html"
+  comment             = "${var.project_name} static frontend"
+  web_acl_id          = aws_wafv2_web_acl.site.arn
 
   origin {
-    domain_name = aws_elastic_beanstalk_environment.app.cname
-    origin_id   = "beanstalk"
-
-    # The AWS-managed Beanstalk hostname has no matching TLS certificate.
-    custom_origin_config {
-      http_port              = 80
-      https_port             = 443
-      origin_protocol_policy = "http-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
-    }
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                = "static-site"
+    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
   }
 
   default_cache_behavior {
-    target_origin_id       = "beanstalk"
+    target_origin_id       = "static-site"
     viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    allowed_methods        = ["GET", "HEAD"]
     cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = data.aws_cloudfront_cache_policy.disabled.id
-    # Forward Host and Origin together to preserve the app's same-origin check.
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
-    compress                 = true
-  }
-
-  # Do not retain transient API/origin failures at the edge.
-  dynamic "custom_error_response" {
-    for_each = toset([400, 403, 404, 405, 414, 416, 500, 501, 502, 503, 504])
-    content {
-      error_code            = custom_error_response.value
-      error_caching_min_ttl = 0
-    }
+    cache_policy_id        = data.aws_cloudfront_cache_policy.optimized.id
+    compress               = true
   }
 
   restrictions {
@@ -53,4 +58,16 @@ resource "aws_cloudfront_distribution" "app" {
   viewer_certificate {
     cloudfront_default_certificate = true
   }
+}
+
+# A Free subscription requires both the distribution and its dedicated web ACL.
+# No configurable paid tier or automatic paid fallback.
+resource "aws_pricingplanmanager_subscription" "site" {
+  plan_family = "CloudFront"
+  plan_tier   = "FREE"
+  usage_level = "DEFAULT"
+  resource_arns = [
+    aws_cloudfront_distribution.app.arn,
+    aws_wafv2_web_acl.site.arn,
+  ]
 }

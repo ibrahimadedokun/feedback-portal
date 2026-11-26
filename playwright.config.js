@@ -20,9 +20,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "node server.js",
+    command: "http-server public -p 3100 -c-1",
     port: 3100,
-    env: { PORT: "3100", FEEDBACK_MODE: "demo" },
     reuseExistingServer: false,
   },
 });

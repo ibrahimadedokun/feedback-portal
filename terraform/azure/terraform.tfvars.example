@@ -1,14 +1,4 @@
 subscription_id = "00000000-0000-0000-0000-000000000000"
-location        = "uksouth"
 project_name    = "feedback-portal"
-container_image = "ghcr.io/owner/repository:REPLACE_WITH_COMMIT_SHA"
-
-# Must match GitHub's exact subject. Repositories using immutable subjects also
-# include owner/repository IDs; see README.md before applying.
-github_oidc_subject = "repo:OWNER/REPOSITORY:environment:azure-production"
-
-# Demo submissions are NOT stored or delivered. To enable existing SNS delivery,
-# set feedback_mode = "sns", provide sns_topic_arn and supply aws_credentials via
-# TF_VAR_aws_credentials (never put credentials in this file).
-feedback_mode = "demo"
-# sns_topic_arn = "arn:aws:sns:eu-west-2:123456789012:feedback"
+location        = "uksouth"
+site_location   = "westeurope"

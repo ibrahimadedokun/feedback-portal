@@ -7,15 +7,12 @@
     "node": ">=26"
   },
   "scripts": {
-    "dev": "node --watch --env-file-if-exists=.env server.js",
-    "start": "node --env-file-if-exists=.env server.js",
-    "test": "node --test test/*.test.js",
-    "test:browser": "playwright test"
-  },
-  "dependencies": {
-    "@aws-sdk/client-sns": "^3.1166.0"
+    "dev": "http-server public -p 3000 -c-1",
+    "start": "http-server public -c-1",
+    "test": "playwright test"
   },
   "devDependencies": {
-    "@playwright/test": "^1.65.0"
+    "@playwright/test": "^1.65.0",
+    "http-server": "^14.1.1"
   }
 }
