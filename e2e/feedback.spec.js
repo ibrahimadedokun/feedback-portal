@@ -64,13 +64,20 @@ test("health check starts in parallel and does not block loading or submission",
   }
 });
 
-test("failed health check shows a nonblocking status", async ({ page }) => {
-  await page.route(`${apiUrl}/health`, (route) => route.fulfill({ status: 503 }));
-  await page.goto("/");
-  await expect(page.locator("#api-status")).toContainText("may be unavailable");
-  await expect(page.locator("#feedback-form")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send feedback" })).toBeEnabled();
-});
+for (const failure of ["server", "network"]) {
+  test(`${failure} health check failure stays silent and allows submission`, async ({ page }) => {
+    await page.route(`${apiUrl}/health`, (route) => failure === "network"
+      ? route.abort("failed")
+      : route.fulfill({ status: 503 }));
+    await page.goto("/");
+    await expect(page.locator("#api-status")).toHaveCount(0);
+    await expect(page.getByText("The feedback service may be unavailable.", { exact: false })).toHaveCount(0);
+    await expect(page.locator("#feedback-form")).toBeVisible();
+    await fillFeedback(page);
+    await page.getByRole("button", { name: "Send feedback" }).click();
+    await expect(page.locator("#success-panel")).toBeVisible();
+  });
+}
 
 for (const failure of ["json", "text", "network"]) {
   test(`${failure} delivery failure retains feedback and allows retry`, async ({ page }) => {

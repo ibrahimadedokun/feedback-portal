@@ -127,19 +127,15 @@ $("year").textContent = new Date().getFullYear();
 // Warm up/check the external API while the project list loads independently.
 async function checkHealth() {
   try {
-    const response = await fetch(endpoint(api.healthPath), {
+    await fetch(endpoint(api.healthPath), {
       signal: AbortSignal.timeout(15000),
       cache: "no-store",
     });
-    if (!response.ok) throw new Error("API unavailable");
-    $("api-status").hidden = true;
   } catch {
-    $("api-status").textContent =
-      "The feedback service may be unavailable. You can still write your feedback and try sending it.";
-    $("api-status").hidden = true;
+    // Warm-up failures should not interrupt the feedback form.
   }
 }
-await checkHealth();
+void checkHealth();
 
 try {
   const response = await fetch("./projects.json", {
